@@ -312,6 +312,7 @@ GameWorld::GameWorld(
   {
     mpState->mPlayer.position() = *playerPositionOverride;
     mpState->mCamera.centerViewOnPlayer();
+    mpState->mPreviousCameraPosition = mpState->mCamera.position();
     updateGameLogic(initialInput);
   }
 
@@ -530,6 +531,7 @@ void GameWorld::loadLevel(const PlayerInput& initialInput)
   createNewState();
 
   mpState->mCamera.centerViewOnPlayer();
+  mpState->mPreviousCameraPosition = mpState->mCamera.position();
   updateGameLogic(initialInput);
 
   if (data::isBossLevel(mSessionId.mLevel))
@@ -651,6 +653,7 @@ void GameWorld::updateGameLogic(const PlayerInput& input)
   mpState->mPlayerInteractionSystem.updatePlayerInteraction(
     input, mpState->mEntities);
   mpState->mPlayer.update(input);
+  mpState->mPreviousCameraPosition = mpState->mCamera.position();
   mpState->mCamera.update(input, viewPortSize);
 
   engine::markActiveEntities(
@@ -727,7 +730,7 @@ void GameWorld::render(const float interpolationFactor)
 
     if (mpOptions->mPerElementUpscalingEnabled)
     {
-      drawMapAndSprites(viewPortSize);
+      drawMapAndSprites(viewPortSize, interpolationFactor);
 
       {
         const auto saved = mLowResLayer.bindAndReset();
@@ -742,7 +745,7 @@ void GameWorld::render(const float interpolationFactor)
     }
     else
     {
-      drawMapAndSprites(viewPortSize);
+      drawMapAndSprites(viewPortSize, interpolationFactor);
       mpState->mParticles.render(
         mpState->mCamera.position(), interpolationFactor);
       mpState->mDebuggingSystem.update(mpState->mEntities, viewPortSize);
@@ -851,14 +854,65 @@ void GameWorld::render(const float interpolationFactor)
 }
 
 
-void GameWorld::drawMapAndSprites(const base::Extents& viewPortSize)
+void GameWorld::drawMapAndSprites(
+  const base::Extents& viewPortSizeOriginal,
+  const float interpolationFactor)
 {
   using game_logic::components::TileDebris;
 
   auto& state = *mpState;
-  const auto& cameraPosition = mpState->mCamera.position();
+  const auto& currentCameraPosition = state.mCamera.position();
+  const auto& previousCameraPosition = state.mPreviousCameraPosition;
 
-  auto renderBackgroundLayers = [&]() {
+  const auto interpolatedCameraPosition = base::Point<float>{
+    base::lerp(
+      float(previousCameraPosition.x),
+      float(currentCameraPosition.x),
+      interpolationFactor),
+    base::lerp(
+      float(previousCameraPosition.y),
+      float(currentCameraPosition.y),
+      interpolationFactor)};
+
+  auto cameraOffset =
+    base::Vector{
+      base::round(data::tilesToPixels(interpolatedCameraPosition.x)),
+      base::round(data::tilesToPixels(interpolatedCameraPosition.y))} -
+    data::tileVectorToPixelVector(previousCameraPosition);
+
+  const auto direction = currentCameraPosition - previousCameraPosition;
+
+  auto renderStartPosition = previousCameraPosition;
+  if (direction.x < 0)
+  {
+    renderStartPosition.x = currentCameraPosition.x;
+  }
+  if (direction.y < 0)
+  {
+    renderStartPosition.y = currentCameraPosition.y;
+  }
+
+  auto viewPortSize = viewPortSizeOriginal;
+  if (direction.x != 0)
+  {
+    ++viewPortSize.width;
+  }
+  if (direction.y != 0)
+  {
+    ++viewPortSize.height;
+  }
+
+  if (direction.x < 0)
+  {
+    cameraOffset.x = data::GameTraits::tileSize + cameraOffset.x;
+  }
+
+  if (direction.y < 0)
+  {
+    cameraOffset.y = data::GameTraits::tileSize + cameraOffset.y;
+  }
+
+  auto renderBackdrop = [&]() {
     if (state.mBackdropFlashColor)
     {
       mpRenderer->drawFilledRectangle(
@@ -867,25 +921,39 @@ void GameWorld::drawMapAndSprites(const base::Extents& viewPortSize)
     }
     else
     {
-      state.mMapRenderer.renderBackdrop(cameraPosition, viewPortSize);
+      state.mMapRenderer.renderBackdrop(
+        interpolatedCameraPosition, viewPortSize);
     }
-
-    state.mMapRenderer.renderBackground(cameraPosition, viewPortSize);
-    state.mSpriteRenderingSystem.renderRegularSprites();
   };
 
+  auto outerStateSave = renderer::saveState(mpRenderer);
+
+  mpState->mSpriteRenderingSystem.update(
+    mpState->mEntities, viewPortSize, renderStartPosition);
 
   const auto waterEffectAreas =
-    collectWaterEffectAreas(state.mEntities, cameraPosition, viewPortSize);
+    collectWaterEffectAreas(state.mEntities, renderStartPosition, viewPortSize);
   if (waterEffectAreas.empty())
   {
-    renderBackgroundLayers();
+    renderBackdrop();
+
+    mpRenderer->setGlobalTranslation(
+      localToGlobalTranslation(mpRenderer, cameraOffset * -1));
+
+    state.mMapRenderer.renderBackground(renderStartPosition, viewPortSize);
+    state.mSpriteRenderingSystem.renderRegularSprites();
   }
   else
   {
     {
       auto saved = mWaterEffectBuffer.bind();
-      renderBackgroundLayers();
+      renderBackdrop();
+
+      mpRenderer->setGlobalTranslation(
+        localToGlobalTranslation(mpRenderer, cameraOffset * -1));
+
+      state.mMapRenderer.renderBackground(renderStartPosition, viewPortSize);
+      state.mSpriteRenderingSystem.renderRegularSprites();
     }
 
     {
@@ -905,14 +973,14 @@ void GameWorld::drawMapAndSprites(const base::Extents& viewPortSize)
     }
   }
 
-  state.mMapRenderer.renderForeground(cameraPosition, viewPortSize);
+  state.mMapRenderer.renderForeground(renderStartPosition, viewPortSize);
   state.mSpriteRenderingSystem.renderForegroundSprites();
 
   // tile debris
   state.mEntities.each<TileDebris, WorldPosition>(
     [&](entityx::Entity, const TileDebris& debris, const WorldPosition& pos) {
       state.mMapRenderer.renderSingleTile(
-        debris.mTileIndex, pos, cameraPosition);
+        debris.mTileIndex, pos, renderStartPosition);
     });
 }
 
@@ -1148,6 +1216,7 @@ void GameWorld::restartFromCheckpoint()
   mpState->mPlayer.reSpawnAt(mpState->mActivatedCheckpoint->mPosition);
 
   mpState->mCamera.centerViewOnPlayer();
+  mpState->mPreviousCameraPosition = mpState->mCamera.position();
   updateGameLogic({});
   render();
 
@@ -1176,6 +1245,7 @@ void GameWorld::handleTeleporter()
   }
 
   mpState->mCamera.centerViewOnPlayer();
+  mpState->mPreviousCameraPosition = mpState->mCamera.position();
   updateGameLogic({});
   mpServiceProvider->fadeInScreen();
 }

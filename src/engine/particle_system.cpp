@@ -72,8 +72,8 @@ struct Particle
   base::Vector offsetAtTime(const int framesElapsed) const
   {
     return {
-      mVelocityX * framesElapsed,
-      yOffsetAtTime(mInitialOffsetIndexY, framesElapsed)};
+      mVelocityX * std::max(0, framesElapsed),
+      yOffsetAtTime(mInitialOffsetIndexY, std::max(framesElapsed, 0))};
   }
 
   std::int16_t mVelocityX;
@@ -157,11 +157,11 @@ struct ParticleGroup
     {
       const auto currentParticlePosition =
         particle.offsetAtTime(mFramesElapsed);
-      const auto futureParticlePosition =
-        particle.offsetAtTime(mFramesElapsed + 1);
+      const auto previousParticlePosition =
+        particle.offsetAtTime(mFramesElapsed - 1);
 
       const auto particlePosition =
-        lerp(currentParticlePosition, futureParticlePosition, interpolation);
+        lerp(previousParticlePosition, currentParticlePosition, interpolation);
       renderer.drawPoint(screenSpaceOrigin + particlePosition, mColor);
     }
   }

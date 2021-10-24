@@ -133,7 +133,9 @@ private:
 
   void printDebugText(std::ostream& stream) const;
 
-  void drawMapAndSprites(const base::Extents& viewPortSize);
+  void drawMapAndSprites(
+    const base::Extents& viewPortSize,
+    float interpolationFactor);
   bool widescreenModeOn() const;
 
   struct QuickSaveData

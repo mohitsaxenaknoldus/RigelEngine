@@ -108,7 +108,7 @@ void GameRunner::updateAndRender(engine::TimeDelta dt)
   const auto interpolationFactor =
     mContext.mpUserProfile->mOptions.mMotionSmoothing
     ? static_cast<float>(mAccumulatedTime / game_logic::GAME_LOGIC_UPDATE_DELAY)
-    : 0.0f;
+    : 1.0f;
   mWorld.render(interpolationFactor);
 
   renderDebugText();
