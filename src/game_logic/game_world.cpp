@@ -700,7 +700,7 @@ void GameWorld::updateGameLogic(const PlayerInput& input)
 }
 
 
-void GameWorld::render(float interpolationFactor)
+void GameWorld::render(const float interpolationFactor)
 {
   if (
     widescreenModeOn() != mWidescreenModeWasOn ||
