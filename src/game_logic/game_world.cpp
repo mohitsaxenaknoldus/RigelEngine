@@ -711,7 +711,7 @@ void GameWorld::render(float interpolationFactor)
       renderer::createFullscreenRenderTarget(mpRenderer, *mpOptions);
   }
 
-  auto drawWorld = [this](const base::Extents& viewPortSize) {
+  auto drawWorld = [&](const base::Extents& viewPortSize) {
     const auto clipRectGuard = renderer::saveState(mpRenderer);
     mpRenderer->setClipRect(base::Rect<int>{
       mpRenderer->globalTranslation(),
@@ -733,7 +733,8 @@ void GameWorld::render(float interpolationFactor)
         const auto saved = mLowResLayer.bindAndReset();
 
         mpRenderer->clear({0, 0, 0, 0});
-        mpState->mParticles.render(mpState->mCamera.position());
+        mpState->mParticles.render(
+          mpState->mCamera.position(), interpolationFactor);
         mpState->mDebuggingSystem.update(mpState->mEntities, viewPortSize);
       }
 
@@ -742,7 +743,8 @@ void GameWorld::render(float interpolationFactor)
     else
     {
       drawMapAndSprites(viewPortSize);
-      mpState->mParticles.render(mpState->mCamera.position());
+      mpState->mParticles.render(
+        mpState->mCamera.position(), interpolationFactor);
       mpState->mDebuggingSystem.update(mpState->mEntities, viewPortSize);
     }
   };
