@@ -25,6 +25,7 @@
 #include "data/sound_ids.hpp"
 #include "data/strings.hpp"
 #include "data/unit_conversions.hpp"
+#include "engine/base_components.hpp"
 #include "engine/entity_tools.hpp"
 #include "engine/physical_components.hpp"
 #include "game_logic/actor_tag.hpp"
@@ -52,6 +53,7 @@ using namespace engine;
 using namespace std;
 
 using data::PlayerModel;
+using engine::components::InterpolationState;
 using engine::components::WorldPosition;
 
 
@@ -628,6 +630,11 @@ void GameWorld::updateGameLogic(const PlayerInput& input)
   mHudRenderer.updateAnimation();
   mMessageDisplay.update();
 
+  mpState->mEntities.each<InterpolationState, WorldPosition>(
+    [&](entityx::Entity, InterpolationState& interp, const WorldPosition& pos) {
+      interp.mPreviousPosition = pos;
+    });
+
   if (mpState->mActiveBossEntity && mpState->mBossDeathAnimationStartPending)
   {
     engine::removeSafely<game_logic::components::PlayerDamaging>(
@@ -692,12 +699,12 @@ void GameWorld::updateGameLogic(const PlayerInput& input)
   // cover the entire width of the screen in widescreen mode, we need a larger
   // viewport height for rendering to ensure that sprites in the lower left of
   // the screen are rendered.
-  const auto renderingViewPortSize = widescreenModeOn()
-    ? base::
-        Extents{viewPortSize.width, data::GameTraits::viewPortHeightTiles - 1}
-    : viewPortSize;
-  mpState->mSpriteRenderingSystem.update(
-    mpState->mEntities, renderingViewPortSize, mpState->mCamera.position());
+  //const auto renderingViewPortSize = widescreenModeOn()
+    //? base::
+        //Extents{viewPortSize.width, data::GameTraits::viewPortHeightTiles - 1}
+    //: viewPortSize;
+  //mpState->mSpriteRenderingSystem.update(
+    //mpState->mEntities, renderingViewPortSize, mpState->mCamera.position());
 
   mpState->mIsOddFrame = !mpState->mIsOddFrame;
 }
@@ -793,11 +800,11 @@ void GameWorld::render(const float interpolationFactor)
     const auto viewPortSize = base::Extents{
       info.mWidthTiles, data::GameTraits::viewPortHeightTiles - 1};
 
-    if (!mWidescreenModeWasOn)
-    {
-      mpState->mSpriteRenderingSystem.update(
-        mpState->mEntities, viewPortSize, mpState->mCamera.position());
-    }
+    //if (!mWidescreenModeWasOn)
+    //{
+      //mpState->mSpriteRenderingSystem.update(
+        //mpState->mEntities, viewPortSize, mpState->mCamera.position());
+    //}
 
     if (mpOptions->mPerElementUpscalingEnabled)
     {
@@ -929,7 +936,7 @@ void GameWorld::drawMapAndSprites(
   auto outerStateSave = renderer::saveState(mpRenderer);
 
   mpState->mSpriteRenderingSystem.update(
-    mpState->mEntities, viewPortSize, renderStartPosition);
+    mpState->mEntities, viewPortSize, renderStartPosition, interpolationFactor);
 
   const auto waterEffectAreas =
     collectWaterEffectAreas(state.mEntities, renderStartPosition, viewPortSize);
@@ -978,7 +985,7 @@ void GameWorld::drawMapAndSprites(
 
   // tile debris
   state.mEntities.each<TileDebris, WorldPosition>(
-    [&](entityx::Entity, const TileDebris& debris, const WorldPosition& pos) {
+    [&](entityx::Entity e, const TileDebris& debris, const WorldPosition& pos) {
       state.mMapRenderer.renderSingleTile(
         debris.mTileIndex, pos, renderStartPosition);
     });
@@ -1099,11 +1106,11 @@ void GameWorld::quickLoad()
     *mpQuickSave->mpState, mpServiceProvider, mpPlayerModel, mSessionId);
   mMessageDisplay.setMessage("Quick save restored.");
 
-  const auto& viewPortSize = widescreenModeOn()
-    ? viewPortSizeWideScreen(mpRenderer)
-    : data::GameTraits::mapViewPortSize;
-  mpState->mSpriteRenderingSystem.update(
-    mpState->mEntities, viewPortSize, mpState->mCamera.position());
+  //const auto& viewPortSize = widescreenModeOn()
+    //? viewPortSizeWideScreen(mpRenderer)
+    //: data::GameTraits::mapViewPortSize;
+  //mpState->mSpriteRenderingSystem.update(
+    //mpState->mEntities, viewPortSize, mpState->mCamera.position(), 1.0f);
 }
 
 

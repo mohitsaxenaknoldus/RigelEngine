@@ -27,6 +27,11 @@ namespace components
 using WorldPosition = base::Vector;
 using BoundingBox = base::Rect<int>;
 
+struct InterpolationState
+{
+  WorldPosition mPreviousPosition;
+};
+
 /** Marks entity as active
  *
  * Most systems should only operate on active entities. Entity activation

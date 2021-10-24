@@ -84,6 +84,7 @@ void spawnTileDebris(
     GravityAffected{false},
     IgnoreCollisions{true});
   debris.assign<MovementSequence>(movement);
+  debris.assign<InterpolationState>();
 }
 
 

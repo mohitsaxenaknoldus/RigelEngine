@@ -36,6 +36,7 @@ using components::AnimationLoop;
 using components::AnimationSequence;
 using components::Orientation;
 using components::Sprite;
+using components::InterpolationState;
 using components::WorldPosition;
 
 
@@ -69,7 +70,8 @@ void collectVisibleSprites(
   ex::EntityManager& es,
   const base::Vector& cameraPosition,
   const base::Extents& viewPortSize,
-  std::vector<SortableDrawSpec>& output)
+  std::vector<SortableDrawSpec>& output,
+  const float interp)
 {
   using components::BoundingBox;
   using components::DrawTopMost;
@@ -81,6 +83,7 @@ void collectVisibleSprites(
   auto submit = [&](
                   const SpriteFrame& frame,
                   const base::Vector& position,
+                  const base::Vector& previousP,
                   const bool flashingWhite,
                   const bool translucent,
                   const bool drawTopmost,
@@ -90,6 +93,8 @@ void collectVisibleSprites(
     const auto heightTiles = frame.mDimensions.height;
     const auto topLeft =
       position - base::Vector(0, heightTiles - 1) + frame.mDrawOffset;
+    const auto prevTopLeft =
+      previousP - base::Vector(0, heightTiles - 1) + frame.mDrawOffset;
 
     // Discard sprites outside visible area
     const auto frameBox = BoundingBox{topLeft, frame.mDimensions};
@@ -98,8 +103,13 @@ void collectVisibleSprites(
       return;
     }
 
+    const auto interpTopLeft = base::Vector{
+      base::round(base::lerp(prevTopLeft.x * 8.0f, topLeft.x * 8.0f, interp)),
+      base::round(base::lerp(prevTopLeft.y * 8.0f, topLeft.y * 8.0f, interp)),
+    };
+
     const auto destRect = base::Rect<int>{
-      data::tileVectorToPixelVector(topLeft),
+      interpTopLeft,
       data::tileExtentsToPixelExtents(frame.mDimensions)};
     const auto drawSpec =
       SpriteDrawSpec{destRect, frame.mImageId, flashingWhite, translucent};
@@ -115,6 +125,9 @@ void collectVisibleSprites(
       {
         return;
       }
+
+      const auto previousPos = entity.has_component<InterpolationState>()
+      ? entity.component<InterpolationState>()->mPreviousPosition : position;
 
       const auto screenPosition = position - cameraPosition;
       const auto drawTopmost = entity.has_component<DrawTopMost>();
@@ -137,6 +150,7 @@ void collectVisibleSprites(
         submit(
           sprite.mpDrawData->mFrames[frameIndex],
           screenPosition,
+          previousPos - cameraPosition,
           sprite.mFlashingWhiteStates.test(slotIndex),
           sprite.mTranslucent,
           drawTopmost,
@@ -155,6 +169,7 @@ void collectVisibleSprites(
           submit(
             sprite.mpDrawData->mFrames[frameIndex],
             screenPosition + item.mOffset,
+            previousPos + item.mOffset - cameraPosition,
             false,
             sprite.mTranslucent,
             drawTopmost,
@@ -266,14 +281,15 @@ SpriteRenderingSystem::SpriteRenderingSystem(
 void SpriteRenderingSystem::update(
   ex::EntityManager& es,
   const base::Extents& viewPortSize,
-  const base::Vector& cameraPosition)
+  const base::Vector& cameraPosition,
+  const float interp)
 {
   using std::back_inserter;
   using std::begin;
   using std::end;
 
   mSortBuffer.clear();
-  collectVisibleSprites(es, cameraPosition, viewPortSize, mSortBuffer);
+  collectVisibleSprites(es, cameraPosition, viewPortSize, mSortBuffer, interp);
   std::sort(begin(mSortBuffer), end(mSortBuffer));
 
   mSprites.clear();
